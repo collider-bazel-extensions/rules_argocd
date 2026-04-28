@@ -1,0 +1,78 @@
+"""Tests for rules_argocd.
+
+- Analysis tests verify rules instantiate cleanly without needing a cluster.
+- Smoke test (`:smoke_test`, manual) composes a real kind cluster, applies
+  Argo CD via the rule, then creates an Application sourcing
+  argoproj/argocd-example-apps `guestbook` and asserts it reaches
+  Synced + Healthy. Needs Docker on the host + outbound to GitHub.
+"""
+
+load("@rules_argocd//:defs.bzl", "argocd_health_check", "argocd_install")
+load("@rules_itest//:itest.bzl", "itest_service", "service_test")
+load("@rules_kind//:defs.bzl", "kind_cluster", "kind_health_check")
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load(":analysis_tests.bzl", "argocd_health_check_test_suite", "argocd_install_test_suite")
+
+# ---- analysis ---------------------------------------------------------------
+
+argocd_install_test_suite(name = "argocd_install_analysis")
+
+argocd_health_check_test_suite(name = "argocd_health_check_analysis")
+
+# ---- smoke composition ------------------------------------------------------
+# kind_cluster -> argocd_install -> service_test that creates an Application
+# and asserts Synced + Healthy.
+
+kind_cluster(name = "cluster", k8s_version = "1.32")
+
+kind_health_check(name = "cluster_health", cluster = ":cluster")
+
+itest_service(
+    name = "kind_svc",
+    exe = ":cluster",
+    health_check = ":cluster_health",
+    tags = ["manual"],
+)
+
+# Argo CD via the rule under test.
+argocd_install(name = "argocd_bin", tags = ["manual"])
+
+argocd_health_check(name = "argocd_health_bin", tags = ["manual"])
+
+sh_binary(
+    name = "argocd_install_wrapper",
+    srcs = ["argocd_install_wrapper.sh"],
+    data = [":argocd_bin"],
+)
+
+sh_binary(
+    name = "argocd_health_wrapper",
+    srcs = ["argocd_health_wrapper.sh"],
+    data = [":argocd_health_bin"],
+)
+
+itest_service(
+    name = "argocd_svc",
+    exe = ":argocd_install_wrapper",
+    deps = [":kind_svc"],
+    health_check = ":argocd_health_wrapper",
+    tags = ["manual"],
+)
+
+sh_test(
+    name = "smoke_test_bin",
+    srcs = ["smoke_test.sh"],
+    tags = ["manual"],
+)
+
+service_test(
+    name = "smoke_test",
+    services = [":argocd_svc"],
+    test = ":smoke_test_bin",
+    tags = [
+        "manual",  # needs Docker; ~2-3 minute warm-up
+        "no-sandbox",
+        "requires-network",
+    ],
+)

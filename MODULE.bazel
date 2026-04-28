@@ -1,0 +1,38 @@
+"""rules_argocd — hermetic Argo CD install + readiness for Bazel tests."""
+
+module(
+    name = "rules_argocd",
+    version = "0.1.0",
+)
+
+bazel_dep(name = "bazel_skylib", version = "1.8.2")
+bazel_dep(name = "platforms", version = "1.0.0")
+bazel_dep(name = "rules_python", version = "1.7.0")
+
+argocd = use_extension("//:extensions.bzl", "argocd")
+
+# Pinned Argo CD release. The extension fetches `manifests/install.yaml`
+# from the matching upstream tag and sha256-verifies it; consumers don't
+# need helm — kubectl-only at runtime. Add more versions by tagging them
+# in private/versions.bzl and calling argocd.version() again.
+argocd.version(
+    name = "argocd",
+    version = "3.3.8",
+)
+
+use_repo(argocd, "argocd")
+
+register_toolchains("@argocd//:all")
+
+# ---- dev-only: rules_kind + rules_itest for the smoke test ------------------
+# Consumers do NOT inherit these. The in-tree smoke test composes a kind
+# cluster, Argo CD via this rule set, and an Application reconciliation
+# assertion against argoproj/argocd-example-apps.
+bazel_dep(name = "rules_itest", version = "0.0.52", dev_dependency = True)
+bazel_dep(name = "rules_shell", version = "0.8.0", dev_dependency = True)
+bazel_dep(name = "rules_kind", version = "0.1.2", dev_dependency = True)
+git_override(
+    module_name = "rules_kind",
+    remote = "https://github.com/collider-bazel-extensions/rules_kind",
+    commit = "b9c4670646f8e3772816f56a048e311d5310a763",  # v0.1.2 — adds k8s 1.32
+)

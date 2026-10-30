@@ -38,7 +38,7 @@ jobs:
           if-no-files-found: ignore
 
   smoke:
-    # End-to-end: kind cluster (k8s 1.32) + Argo CD install via this rule
+    # End-to-end: kind cluster (k8s 1.35) + Argo CD install via this rule
     # + Application reconciliation assertion against argoproj/argocd-example-apps.
     # Runs under rootful Docker on ubuntu-latest, which has the kernel
     # capabilities Argo CD's components want. Outbound to GitHub is required

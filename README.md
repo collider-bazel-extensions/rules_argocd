@@ -51,7 +51,7 @@ via `archive_override` or a git pin pointing at a tag.
 
 For the in-tree smoke test composition, you also need
 [`rules_kind`](https://github.com/collider-bazel-extensions/rules_kind)
-**≥ 0.1.2** (the smoke pins `k8s_version = "1.32"`).
+**≥ 0.1.2** (the smoke pins `k8s_version = "1.35"`).
 
 ---
 
@@ -153,7 +153,7 @@ load("@rules_kind//:defs.bzl", "kind_cluster", "kind_health_check")
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 
 # 1. The cluster.
-kind_cluster(name = "cluster", k8s_version = "1.32")
+kind_cluster(name = "cluster", k8s_version = "1.35")
 kind_health_check(name = "cluster_health", cluster = ":cluster")
 itest_service(name = "kind_svc", exe = ":cluster", health_check = ":cluster_health")
 

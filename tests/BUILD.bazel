@@ -24,7 +24,7 @@ argocd_health_check_test_suite(name = "argocd_health_check_analysis")
 # kind_cluster -> argocd_install -> service_test that creates an Application
 # and asserts Synced + Healthy.
 
-kind_cluster(name = "cluster", k8s_version = "1.32")
+kind_cluster(name = "cluster", k8s_version = "1.35")
 
 kind_health_check(name = "cluster_health", cluster = ":cluster")
 

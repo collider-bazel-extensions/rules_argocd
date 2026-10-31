@@ -211,6 +211,7 @@ chain actually reconciles.
 | `kubectl` | **Not vendored.** v0.1 honors `$KUBECTL` env (set by `rules_kind`'s per-cluster env file) and falls back to `$PATH`. | Future: bundle a hermetic kubectl via toolchain. |
 | Target cluster | Out of scope — bring your own (`rules_kind`, real cluster, etc.). | The rule reads `KUBECONFIG` from env. |
 | Argo CD container images | **Pulled at runtime** by the cluster's nodes. Not pre-loaded. | Future: optional `images = [...]` attr for pre-loading via `kind_cluster.images`. |
+| Smoke-test redis image | The in-tree smoke loads Argo CD's redis (`public.ecr.aws/docker/library/redis`) into the kind node at boot, fetched by Bazel by digest (`oci.pull` in `MODULE.bazel`, dev-only), and runs `install.yaml` with that container's `imagePullPolicy` set to `IfNotPresent` (dev toolchain `//tests:smoke_toolchain`). Anonymous ECR pulls from GitHub runners hit "429 Data limit exceeded". | Test-only. Consumers get the unmodified upstream `install.yaml`. When bumping Argo CD, `//tests:smoke_install_yaml` fails if the redis image changed: update `REDIS_IMAGE` in `tests/BUILD.bazel` and the `oci.pull` digest. |
 | Smoke-test Git source | The smoke pulls `argoproj/argocd-example-apps` (`guestbook`) over the public internet — `requires-network`. | Acceptable v0.1 tradeoff vs vendoring our own Git server. |
 
 ---

@@ -22,6 +22,10 @@ argocd.version(
 
 use_repo(argocd, "argocd")
 
+# Dev only: the smoke test's install.yaml (redis imagePullPolicy
+# IfNotPresent; see tests/BUILD.bazel). Registered first so it wins.
+register_toolchains("//tests:smoke_toolchain", dev_dependency = True)
+
 register_toolchains("@argocd//:all")
 
 # ---- dev-only: rules_kind + rules_itest for the smoke test ------------------
@@ -36,3 +40,24 @@ git_override(
     remote = "https://github.com/collider-bazel-extensions/rules_kind",
     commit = "91ff914ccf55fdd627e7cda3d83d7e4ae8206c14",  # v0.2.0 — k8s 1.35/1.36/1.37, digest-pinned kindest/node images
 )
+
+# ---- dev-only: redis image preloaded into the smoke cluster -----------------
+# Anonymous pulls of Argo CD's redis from public.ecr.aws hit ECR's rate
+# limit on GitHub runners ("429 Data limit exceeded"), so the smoke test
+# loads the image into the kind nodes at boot (tests/BUILD.bazel). Bazel
+# fetches it once by digest; the repository cache keeps it.
+# Digest = the multi-arch index of redis:8.2.3-alpine, the tag install.yaml
+# uses (//tests:smoke_install_yaml fails when an Argo CD bump changes it).
+bazel_dep(name = "rules_oci", version = "2.3.0", dev_dependency = True)
+
+oci = use_extension("@rules_oci//oci:extensions.bzl", "oci", dev_dependency = True)
+oci.pull(
+    name = "redis",
+    digest = "sha256:08ad0b1d280850169a790dba1393ff7a90aef951fc19632cf4d3ce4f78e679ba",
+    image = "public.ecr.aws/docker/library/redis",
+    platforms = [
+        "linux/amd64",
+        "linux/arm64",
+    ],
+)
+use_repo(oci, "redis_linux_amd64", "redis_linux_arm64")

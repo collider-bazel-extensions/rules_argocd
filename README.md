@@ -51,7 +51,7 @@ via `archive_override` or a git pin pointing at a tag.
 
 For the in-tree smoke test composition, you also need
 [`rules_kind`](https://github.com/collider-bazel-extensions/rules_kind)
-**≥ 0.1.2** (the smoke pins `k8s_version = "1.32"`).
+**≥ 0.1.2** (the smoke pins `k8s_version = "1.35"`).
 
 ---
 
@@ -153,7 +153,7 @@ load("@rules_kind//:defs.bzl", "kind_cluster", "kind_health_check")
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 
 # 1. The cluster.
-kind_cluster(name = "cluster", k8s_version = "1.32")
+kind_cluster(name = "cluster", k8s_version = "1.35")
 kind_health_check(name = "cluster_health", cluster = ":cluster")
 itest_service(name = "kind_svc", exe = ":cluster", health_check = ":cluster_health")
 
@@ -211,6 +211,7 @@ chain actually reconciles.
 | `kubectl` | **Not vendored.** v0.1 honors `$KUBECTL` env (set by `rules_kind`'s per-cluster env file) and falls back to `$PATH`. | Future: bundle a hermetic kubectl via toolchain. |
 | Target cluster | Out of scope — bring your own (`rules_kind`, real cluster, etc.). | The rule reads `KUBECONFIG` from env. |
 | Argo CD container images | **Pulled at runtime** by the cluster's nodes. Not pre-loaded. | Future: optional `images = [...]` attr for pre-loading via `kind_cluster.images`. |
+| Smoke-test redis image | The in-tree smoke loads Argo CD's redis (`public.ecr.aws/docker/library/redis`) into the kind node at boot, fetched by Bazel by digest from `mirror.gcr.io` (`oci.pull` in `MODULE.bazel`, dev-only; same image and digest), and runs `install.yaml` with that container's `imagePullPolicy` set to `IfNotPresent` (dev toolchain `//tests:smoke_toolchain`). Anonymous ECR pulls from GitHub runners hit "429 Data limit exceeded". | Test-only. Consumers get the unmodified upstream `install.yaml`. When bumping Argo CD, `//tests:smoke_install_yaml` fails if the redis image changed: update `REDIS_IMAGE` in `tests/BUILD.bazel` and the `oci.pull` digest. |
 | Smoke-test Git source | The smoke pulls `argoproj/argocd-example-apps` (`guestbook`) over the public internet — `requires-network`. | Acceptable v0.1 tradeoff vs vendoring our own Git server. |
 
 ---

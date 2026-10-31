@@ -10,8 +10,10 @@
 load("@rules_argocd//:defs.bzl", "argocd_health_check", "argocd_install")
 load("@rules_itest//:itest.bzl", "itest_service", "service_test")
 load("@rules_kind//:defs.bzl", "kind_cluster", "kind_health_check")
+load("@rules_oci//oci:defs.bzl", "oci_load")
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("//toolchain:toolchain.bzl", "argocd_toolchain")
 load(":analysis_tests.bzl", "argocd_health_check_test_suite", "argocd_install_test_suite")
 
 # ---- analysis ---------------------------------------------------------------
@@ -24,7 +26,77 @@ argocd_health_check_test_suite(name = "argocd_health_check_analysis")
 # kind_cluster -> argocd_install -> service_test that creates an Application
 # and asserts Synced + Healthy.
 
-kind_cluster(name = "cluster", k8s_version = "1.32")
+# ---- redis without the registry --------------------------------------------
+# Argo CD's install.yaml runs redis from public.ecr.aws with
+# `imagePullPolicy: Always`. Anonymous pulls from GitHub runners hit ECR's
+# rate limit ("429 Data limit exceeded"), failing the smoke test. For the
+# smoke test only:
+#   1. Bazel fetches the image by digest from mirror.gcr.io (MODULE.bazel
+#      oci.pull "redis"), tags it with install.yaml's name, and kind loads it
+#      into the nodes at boot (:redis_tar).
+#   2. A dev toolchain serves install.yaml with that one container's pull
+#      policy changed to IfNotPresent (with Always, the kubelet contacts the
+#      registry even when the image is already on the node).
+# Everything else in the manifest is the pinned upstream file. Consumers get
+# the unmodified manifest from @argocd.
+REDIS_IMAGE = "public.ecr.aws/docker/library/redis:8.2.3-alpine"
+
+oci_load(
+    name = "redis_load",
+    image = select({
+        "@platforms//cpu:arm64": "@redis_linux_arm64",
+        "//conditions:default": "@redis_linux_amd64",
+    }),
+    repo_tags = [REDIS_IMAGE],
+    tags = ["manual"],
+)
+
+# docker-archive tarball for `kind load image-archive`.
+filegroup(
+    name = "redis_tar",
+    srcs = [":redis_load"],
+    output_group = "tarball",
+    tags = ["manual"],
+)
+
+# Fails the build unless exactly one container runs REDIS_IMAGE with
+# `imagePullPolicy: Always` on the next line. An Argo CD bump that changes
+# the redis image breaks here, so REDIS_IMAGE and the oci.pull digest get
+# updated with it.
+genrule(
+    name = "smoke_install_yaml",
+    srcs = ["@argocd//:install.yaml"],
+    outs = ["smoke_install.yaml"],
+    cmd = """awk -v img='{img}' '
+        prev_is_redis && $$0 ~ /^ *imagePullPolicy: Always$$/ {{ sub(/Always/, "IfNotPresent"); n++ }}
+        {{ prev_is_redis = ($$0 ~ ("^ *image: " img "$$")); print }}
+        END {{
+            if (n != 1) {{
+                print "smoke_install_yaml: expected 1 redis container (" img ") with imagePullPolicy: Always, found " n + 0 "; update REDIS_IMAGE in tests/BUILD.bazel and the oci.pull redis digest in MODULE.bazel" > "/dev/stderr"
+                exit 1
+            }}
+        }}' $< > $@""".format(img = REDIS_IMAGE),
+)
+
+argocd_toolchain(
+    name = "smoke_toolchain_impl",
+    manifest = ":smoke_install_yaml",
+    version = "3.3.8",
+)
+
+# Registered ahead of @argocd//:all, as a dev dependency (MODULE.bazel), so
+# every argocd_install in this repo's tests resolves to it.
+toolchain(
+    name = "smoke_toolchain",
+    toolchain = ":smoke_toolchain_impl",
+    toolchain_type = "//toolchain:argocd",
+)
+
+kind_cluster(
+    name = "cluster",
+    images = [":redis_tar"],
+    k8s_version = "1.35",
+)
 
 kind_health_check(name = "cluster_health", cluster = ":cluster")
 

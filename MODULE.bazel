@@ -48,13 +48,17 @@ git_override(
 # fetches it once by digest; the repository cache keeps it.
 # Digest = the multi-arch index of redis:8.2.3-alpine, the tag install.yaml
 # uses (//tests:smoke_install_yaml fails when an Argo CD bump changes it).
+# Fetched from mirror.gcr.io (Google's Docker Hub cache, same Docker Official
+# Image, same digest) because ECR Public also returns 429 to Bazel's fetch on
+# GitHub runners. The digest pins the content whichever registry serves it;
+# tests/BUILD.bazel tags it with the public.ecr.aws name install.yaml uses.
 bazel_dep(name = "rules_oci", version = "2.3.0", dev_dependency = True)
 
 oci = use_extension("@rules_oci//oci:extensions.bzl", "oci", dev_dependency = True)
 oci.pull(
     name = "redis",
     digest = "sha256:08ad0b1d280850169a790dba1393ff7a90aef951fc19632cf4d3ce4f78e679ba",
-    image = "public.ecr.aws/docker/library/redis",
+    image = "mirror.gcr.io/library/redis",
     platforms = [
         "linux/amd64",
         "linux/arm64",

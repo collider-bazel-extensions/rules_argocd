@@ -31,8 +31,9 @@ argocd_health_check_test_suite(name = "argocd_health_check_analysis")
 # `imagePullPolicy: Always`. Anonymous pulls from GitHub runners hit ECR's
 # rate limit ("429 Data limit exceeded"), failing the smoke test. For the
 # smoke test only:
-#   1. Bazel fetches the image by digest (MODULE.bazel oci.pull "redis") and
-#      kind loads it into the nodes at boot (:redis_tar).
+#   1. Bazel fetches the image by digest from mirror.gcr.io (MODULE.bazel
+#      oci.pull "redis"), tags it with install.yaml's name, and kind loads it
+#      into the nodes at boot (:redis_tar).
 #   2. A dev toolchain serves install.yaml with that one container's pull
 #      policy changed to IfNotPresent (with Always, the kubelet contacts the
 #      registry even when the image is already on the node).

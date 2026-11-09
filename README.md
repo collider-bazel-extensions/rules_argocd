@@ -37,17 +37,33 @@ maintainer or consumer side**.
 ## Installation
 
 ```python
-bazel_dep(name = "rules_argocd", version = "0.1.0")
-
-argocd = use_extension("@rules_argocd//:extensions.bzl", "argocd")
-argocd.version(version = "3.3.8")
-use_repo(argocd, "argocd")
-
-register_toolchains("@argocd//:all")
+bazel_dep(name = "rules_argocd", version = "0.1.1")
 ```
 
-`rules_argocd` is **Bzlmod-only** in v0.1. Until it lands in BCR, consume
+That's all: rules_argocd's own `MODULE.bazel` fetches its pinned Argo CD
+manifest (3.3.8) as `@argocd` and registers the toolchain.
+
+`rules_argocd` is **Bzlmod-only**. Until it lands in BCR, consume
 via `archive_override` or a git pin pointing at a tag.
+
+To choose the Argo CD version, set it in your root module:
+
+```python
+argocd = use_extension("@rules_argocd//:extensions.bzl", "argocd")
+argocd.version(version = "3.3.8")
+```
+
+The root module's `argocd.version()` tags override rules_argocd's own by
+`name` (default `"argocd"`); other modules' tags are ignored. Giving one name
+two versions, or a version not in `private/versions.bzl`, fails with a message
+naming `argocd.version`. Through v0.1.0 the root had to set `argocd.version()`,
+or resolution failed with `does not generate repository "argocd"`; the
+`use_repo(argocd, "argocd")` / `register_toolchains("@argocd//:all")` lines
+earlier READMEs asked for are harmless but no longer needed.
+
+The release archive (the tag tarball) leaves out `tests/` and `tools/`, so
+`bazel query @rules_argocd//...` works for consumers. A `git_override` clone
+still contains them; name packages instead (for example `@rules_argocd//:all`).
 
 For the in-tree smoke test composition, you also need
 [`rules_kind`](https://github.com/collider-bazel-extensions/rules_kind)

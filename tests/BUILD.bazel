@@ -14,13 +14,36 @@ load("@rules_oci//oci:defs.bzl", "oci_load")
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("//toolchain:toolchain.bzl", "argocd_toolchain")
-load(":analysis_tests.bzl", "argocd_health_check_test_suite", "argocd_install_test_suite")
+load(":analysis_tests.bzl", "argocd_cli_test_suite", "argocd_health_check_test_suite", "argocd_install_test_suite")
 
 # ---- analysis ---------------------------------------------------------------
 
 argocd_install_test_suite(name = "argocd_install_analysis")
 
 argocd_health_check_test_suite(name = "argocd_health_check_analysis")
+
+# ---- argocd CLI (#5) ----------------------------------------------------------
+
+platform(
+    name = "linux_arm64",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:aarch64",
+    ],
+)
+
+argocd_cli_test_suite(name = "argocd_cli_analysis")
+
+# Runs the pinned CLI from runfiles with PATH cleared.
+sh_test(
+    name = "argocd_cli_test",
+    srcs = ["argocd_cli_test.sh"],
+    args = [
+        "$(rlocationpath //:argocd)",
+        "3.3.8",
+    ],
+    data = ["//:argocd"],
+)
 
 # ---- smoke composition ------------------------------------------------------
 # kind_cluster -> argocd_install -> service_test that creates an Application

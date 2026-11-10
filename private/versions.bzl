@@ -6,8 +6,14 @@ Schema:
         "<version>": {
             "url": "<URL of manifests/install.yaml at v<version> tag>",
             "sha256": "<sha256>",
+            "cli": {
+                "<platform>": "<sha256 of argocd-<os>-<arch> at v<version>>",
+            },
         },
     }
+
+The CLI binaries download from ARGOCD_CLI_URL; their shas come from the
+release's cli_checksums.txt, checked against the downloaded binaries.
 
 Maintainer flow:
     bash tools/update_versions.sh <version>            # add or update
@@ -18,6 +24,12 @@ ARGOCD_VERSIONS = {
     "3.3.8": {
         "url": "https://raw.githubusercontent.com/argoproj/argo-cd/v3.3.8/manifests/install.yaml",
         "sha256": "75390e0cc232195d6d1a9614631f2beb0baa23ef227db380351ea235904a1f0d",
+        "cli": {
+            "darwin_amd64": "ca33cc48d9bad7fbe9e0f896404638373895c8cd62283ade8f51853aa752eca4",
+            "darwin_arm64": "1a746e3ea3a20e7685e718018cc041539b540104e36fcf91feff9f726dd7089e",
+            "linux_amd64": "11070d2502c5a51523f78388e23ddefb9151bd33f2faab955cde78a9c0d492e6",
+            "linux_arm64": "cec49dcb3a3b9e7f4b78390af52e6890689d02c9f0a3b9a61ecd5b2edf38d49b",
+        },
     },
 }
 
@@ -25,4 +37,8 @@ PLATFORMS = {
     "darwin_amd64": ["@platforms//os:osx", "@platforms//cpu:x86_64"],
     "darwin_arm64": ["@platforms//os:osx", "@platforms//cpu:arm64"],
     "linux_amd64": ["@platforms//os:linux", "@platforms//cpu:x86_64"],
+    "linux_arm64": ["@platforms//os:linux", "@platforms//cpu:aarch64"],
 }
+
+# {version}, {os}, {arch}: e.g. 3.3.8, linux, amd64.
+ARGOCD_CLI_URL = "https://github.com/argoproj/argo-cd/releases/download/v{version}/argocd-{os}-{arch}"

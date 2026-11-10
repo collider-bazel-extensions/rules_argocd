@@ -7,7 +7,10 @@
 #                                                        # private/versions.bzl
 #
 # Argo CD publishes manifests/install.yaml at the matching git tag, so this
-# is just curl + sha256 — no helm rendering needed.
+# is just curl + sha256 — no helm rendering needed. The CLI binaries
+# (argocd-<os>-<arch>, one per PLATFORMS entry) come from the release; their
+# shas are read from the release's cli_checksums.txt and checked against the
+# downloaded binaries.
 set -euo pipefail
 
 VERSION="${1:?usage: tools/update_versions.sh <version> [--update]}"
@@ -27,18 +30,39 @@ curl -fsSL "$URL" -o "$WORKDIR/install.yaml"
 SHA256=$(sha256sum "$WORKDIR/install.yaml" | awk '{print $1}')
 SIZE=$(stat -c %s "$WORKDIR/install.yaml")
 
+CLI_PLATFORMS=(darwin_amd64 darwin_arm64 linux_amd64 linux_arm64)
+REL="https://github.com/argoproj/argo-cd/releases/download/v${VERSION}"
+echo "[update_versions] fetching $REL/cli_checksums.txt"
+curl -fsSL "$REL/cli_checksums.txt" -o "$WORKDIR/cli_checksums.txt"
+CLI_SHAS=()
+for plat in "${CLI_PLATFORMS[@]}"; do
+    asset="argocd-${plat/_/-}"
+    want=$(awk -v a="$asset" '$2 == a {print $1}' "$WORKDIR/cli_checksums.txt")
+    [[ -n "$want" ]] || { echo "no $asset in cli_checksums.txt" >&2; exit 1; }
+    echo "[update_versions] fetching $REL/$asset"
+    curl -fsSL "$REL/$asset" -o "$WORKDIR/$asset"
+    got=$(sha256sum "$WORKDIR/$asset" | awk '{print $1}')
+    [[ "$got" == "$want" ]] || { echo "$asset: sha256 $got, cli_checksums.txt says $want" >&2; exit 1; }
+    rm -f "$WORKDIR/$asset"
+    CLI_SHAS+=("$plat=$got")
+done
+
 echo
 echo "[update_versions] OK"
 echo "    url:    $URL"
 echo "    sha256: $SHA256"
 echo "    bytes:  $SIZE"
+for kv in "${CLI_SHAS[@]}"; do
+    echo "    cli ${kv%%=*}: ${kv#*=}"
+done
 
 if (( UPDATE )); then
     echo
     echo "[update_versions] updating $VERSIONS_BZL"
-    python3 - "$VERSIONS_BZL" "$VERSION" "$URL" "$SHA256" <<'PY'
+    python3 - "$VERSIONS_BZL" "$VERSION" "$URL" "$SHA256" "${CLI_SHAS[@]}" <<'PY'
 import re, sys
 path, version, url, sha = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+cli = dict(kv.split("=", 1) for kv in sys.argv[5:])
 src = open(path).read()
 m = re.search(r"(ARGOCD_VERSIONS\s*=\s*\{)([\s\S]*?)(\n\})", src)
 if not m:
@@ -48,6 +72,9 @@ entry = (
     f'\n    "{version}": {{\n'
     f'        "url": "{url}",\n'
     f'        "sha256": "{sha}",\n'
+    f'        "cli": {{\n'
+    + "".join(f'            "{p}": "{h}",\n' for p, h in sorted(cli.items()))
+    + f'        }},\n'
     f'    }},'
 )
 existing = re.search(rf'\n    "{re.escape(version)}":[\s\S]*?\n    \}},', body)
@@ -68,6 +95,11 @@ else
     echo "       \"$VERSION\": {"
     echo "           \"url\": \"$URL\","
     echo "           \"sha256\": \"$SHA256\","
+    echo "           \"cli\": {"
+    for kv in "${CLI_SHAS[@]}"; do
+        echo "               \"${kv%%=*}\": \"${kv#*=}\","
+    done
+    echo "           },"
     echo "       },"
     echo
     echo "  2. Bump MODULE.bazel's \`argocd.version(version = \"$VERSION\")\`."

@@ -16,7 +16,8 @@ rule is platform-independent (just kubectl + a static YAML). See
 
 **Pinned versions:** Argo CD 3.3.8. The published `manifests/install.yaml`
 is downloaded directly and sha256-verified — **no `helm` is required at
-maintainer or consumer side**.
+maintainer or consumer side**. The matching `argocd` CLI is a runnable
+target (since v0.2.0): `bazel run @rules_argocd//:argocd -- version --client`.
 
 ---
 
@@ -27,6 +28,7 @@ maintainer or consumer side**.
 - [Rules](#rules)
   - [argocd\_install](#argocd_install)
   - [argocd\_health\_check](#argocd_health_check)
+- [The argocd CLI](#the-argocd-cli)
 - [`rules_itest` integration](#rules_itest-integration)
 - [Providers](#providers)
 - [Hermeticity exceptions](#hermeticity-exceptions)
@@ -37,7 +39,7 @@ maintainer or consumer side**.
 ## Installation
 
 ```python
-bazel_dep(name = "rules_argocd", version = "0.1.1")
+bazel_dep(name = "rules_argocd", version = "0.2.0")
 ```
 
 That's all: rules_argocd's own `MODULE.bazel` fetches its pinned Argo CD
@@ -152,6 +154,41 @@ configured namespace are `Available=True`; (3) the
 
 ---
 
+## The argocd CLI
+
+Each `argocd.version()` hub also carries the Argo CD CLI at the same version,
+from the release's `argocd-<os>-<arch>` binaries (sha256-pinned in
+`private/versions.bzl`, from upstream's `cli_checksums.txt`). No host
+`argocd` is needed:
+
+```sh
+bazel run @rules_argocd//:argocd -- version --client
+bazel run @rules_argocd//:argocd -- app list --core -o wide
+```
+
+- `@rules_argocd//:argocd` runs the default hub's CLI (`@argocd`), so it
+  follows your root's `argocd.version()`: pin Argo CD 3.3.8 and you get CLI
+  3.3.8. A hub you name yourself has its own: `@<name>//:argocd`.
+- Platforms: linux and darwin, amd64 and arm64. A binary downloads only when
+  a build needs it for the target platform.
+- As a `data` dependency, its runfiles path is
+  `$(rlocationpath @rules_argocd//:argocd)`:
+
+```python
+go_binary(
+    name = "driver",
+    srcs = ["main.go"],
+    data = ["@rules_argocd//:argocd"],
+    env = {"ARGOCD_CLI": "$(rlocationpath @rules_argocd//:argocd)"},
+    deps = ["@rules_go//go/runfiles"],
+)
+```
+
+Resolve `ARGOCD_CLI` with your language's runfiles library (for Go,
+`runfiles.Rlocation(os.Getenv("ARGOCD_CLI"))`).
+
+---
+
 ## `rules_itest` integration
 
 `rules_argocd` integrates by emitting `itest_service.exe` /
@@ -224,6 +261,7 @@ chain actually reconciles.
 | Component | Status | Notes |
 |---|---|---|
 | `install.yaml` | Fully hermetic. URL + sha256 pinned in `private/versions.bzl`; downloaded by the bzlmod extension. | Update via `bash tools/update_versions.sh <version>` when bumping. |
+| `argocd` CLI | Fully hermetic (v0.2.0). Per-platform release binaries, sha256-pinned in `private/versions.bzl` next to the manifest. | `tools/update_versions.sh` pins them from `cli_checksums.txt` and checks each download. |
 | `kubectl` | **Not vendored.** v0.1 honors `$KUBECTL` env (set by `rules_kind`'s per-cluster env file) and falls back to `$PATH`. | Future: bundle a hermetic kubectl via toolchain. |
 | Target cluster | Out of scope — bring your own (`rules_kind`, real cluster, etc.). | The rule reads `KUBECONFIG` from env. |
 | Argo CD container images | **Pulled at runtime** by the cluster's nodes. Not pre-loaded. | Future: optional `images = [...]` attr for pre-loading via `kind_cluster.images`. |

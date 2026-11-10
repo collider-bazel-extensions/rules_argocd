@@ -10,6 +10,14 @@ exports_files([
     "repositories.bzl",
 ])
 
+# The pinned argocd CLI (#5): `bazel run @rules_argocd//:argocd -- version
+# --client`. It follows argocd.version() (the `@argocd` hub). As a runfile:
+# `$(rlocationpath @rules_argocd//:argocd)`.
+alias(
+    name = "argocd",
+    actual = "@argocd//:argocd",
+)
+
 bzl_library(
     name = "defs",
     srcs = ["defs.bzl"],

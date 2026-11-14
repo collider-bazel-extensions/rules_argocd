@@ -10,6 +10,9 @@
 #      pinned version; a consumer binary finds it at $(rlocationpath); a
 #      named hub has its own `:argocd`; and a linux/arm64 target resolves the
 #      argocd toolchain (this repo's dev-only smoke toolchain hides that)
+#   6. a version not in private/versions.bzl, pinned in argocd.version()
+#      itself (#7): the manifest and CLI are that version, and a platform
+#      without a cli_sha256 fails only when its CLI is built, naming cli_sha256
 # Usage: .github/consumer/check.sh <scratch dir>
 set -euo pipefail
 repo="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -109,3 +112,31 @@ got="$(run @argocd_named//:argocd -- version --client --short)"
 [[ "$got" == "$want"* ]] || { echo "FAIL: @argocd_named//:argocd: $got" >&2; exit 1; }
 (cd "$c" && bazel cquery --platforms=//:linux_arm64 //:argocd >/dev/null)
 echo "PASS: argocd CLI runs ($got) directly, via rlocationpath and from a named hub; linux/arm64 resolves the toolchain"
+
+# 6. A self-pinned version (Argo CD 3.3.18 is not in private/versions.bzl).
+c="$(consumer pinned 'bazel_dep(name = "platforms", version = "1.0.0")
+argocd = use_extension("@rules_argocd//:extensions.bzl", "argocd")
+argocd.version(
+    version = "3.3.18",
+    sha256 = "4a2eb8548ba547580dc9eca91165cfb2fd10503cd0668e7a4cffbb02b4718cfc",
+    cli_sha256 = {"linux_amd64": "949a8bd75332ee1bea47e1dd59ea991ebab5dbf0dce4c2316a07c05d8d86708b"},
+)')"
+cat >> "$c/BUILD.bazel" <<'BUILD'
+
+platform(
+    name = "linux_arm64",
+    constraint_values = ["@platforms//os:linux", "@platforms//cpu:aarch64"],
+)
+BUILD
+(cd "$c" && bazel build //:argocd)
+manifest="$(cd "$c" && bazel info output_base)/external/rules_argocd++argocd+argocd/install.yaml"
+grep -q 'image: quay.io/argoproj/argocd:v3.3.18$' "$manifest" || { echo "FAIL: self-pinned manifest is not 3.3.18 ($manifest)" >&2; exit 1; }
+run() { (cd "$c" && bazel run --noshow_progress --ui_event_filters=-info "$@"); }
+got="$(run @rules_argocd//:argocd -- version --client --short)"
+[[ "$got" == "argocd: v3.3.18+"* ]] || { echo "FAIL: self-pinned CLI: $got" >&2; exit 1; }
+if (cd "$c" && bazel build --platforms=//:linux_arm64 @rules_argocd//:argocd) > "$work/pinned_arm64.out" 2>&1; then
+    echo "FAIL: linux/arm64 CLI built without a cli_sha256" >&2; exit 1
+fi
+grep -q 'no sha256 for the Argo CD 3.3.18 CLI on linux_arm64; add it to argocd.version(cli_sha256' "$work/pinned_arm64.out" || {
+    cat "$work/pinned_arm64.out" >&2; echo "FAIL: missing cli_sha256: wrong error" >&2; exit 1; }
+echo "PASS: self-pinned Argo CD 3.3.18: manifest and CLI ($got); an unpinned platform fails naming cli_sha256"

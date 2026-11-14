@@ -31,6 +31,16 @@ ARGOCD_VERSIONS = {
             "linux_arm64": "cec49dcb3a3b9e7f4b78390af52e6890689d02c9f0a3b9a61ecd5b2edf38d49b",
         },
     },
+    "3.3.19": {
+        "url": "https://raw.githubusercontent.com/argoproj/argo-cd/v3.3.19/manifests/install.yaml",
+        "sha256": "383632a950f78e58b2354ad4dbe519d5d307b13d8b90562a0fc1352f50faf668",
+        "cli": {
+            "darwin_amd64": "10b5012be1c2301b64adc656732b9c4f3b228ba1cf89231ce42a9118f2f64e0e",
+            "darwin_arm64": "b8b056c3fdfb3d7a7313692f2ebc509b7c18899439ad34c6f2fdf66630fffdc8",
+            "linux_amd64": "841d8bb7c6cfdbd09df1455156a3ed794c9e714d2c763587be8926b2ff05649a",
+            "linux_arm64": "19e06eac228079614d904a43e4e2f6bc2d33224613001443cad1c077cdfe20df",
+        },
+    },
 }
 
 PLATFORMS = {
@@ -42,3 +52,7 @@ PLATFORMS = {
 
 # {version}, {os}, {arch}: e.g. 3.3.8, linux, amd64.
 ARGOCD_CLI_URL = "https://github.com/argoproj/argo-cd/releases/download/v{version}/argocd-{os}-{arch}"
+
+# {version}: the default install.yaml URL for an argocd.version() with its own
+# sha256 and no url.
+ARGOCD_MANIFEST_URL = "https://raw.githubusercontent.com/argoproj/argo-cd/v{version}/manifests/install.yaml"

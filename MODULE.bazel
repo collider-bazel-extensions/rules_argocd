@@ -2,7 +2,7 @@
 
 module(
     name = "rules_argocd",
-    version = "0.2.0",
+    version = "0.3.0",
 )
 
 bazel_dep(name = "bazel_skylib", version = "1.8.2")
@@ -14,10 +14,12 @@ argocd = use_extension("//:extensions.bzl", "argocd")
 # Pinned Argo CD release. The extension fetches `manifests/install.yaml`
 # from the matching upstream tag and sha256-verifies it; consumers don't
 # need helm — kubectl-only at runtime. Add more versions by tagging them
-# in private/versions.bzl and calling argocd.version() again.
+# in private/versions.bzl and calling argocd.version() again. 3.3.19 since
+# v0.3.0 (#7): 3.3.8's controller panics on some syncs and never retries
+# them (argoproj/argo-cd#26608, fixed in 3.3.10).
 argocd.version(
     name = "argocd",
-    version = "3.3.8",
+    version = "3.3.19",
 )
 
 use_repo(argocd, "argocd")

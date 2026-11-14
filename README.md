@@ -14,7 +14,9 @@ and CRD wiring all work end-to-end.
 rule is platform-independent (just kubectl + a static YAML). See
 [Contributing](#contributing).
 
-**Pinned versions:** Argo CD 3.3.8. The published `manifests/install.yaml`
+**Pinned versions:** Argo CD 3.3.19 (default, since v0.3.0) and 3.3.8; any
+other release can be pinned in your `MODULE.bazel`
+([below](#versions-not-in-the-list)). The published `manifests/install.yaml`
 is downloaded directly and sha256-verified — **no `helm` is required at
 maintainer or consumer side**. The matching `argocd` CLI is a runnable
 target (since v0.2.0): `bazel run @rules_argocd//:argocd -- version --client`.
@@ -39,11 +41,11 @@ target (since v0.2.0): `bazel run @rules_argocd//:argocd -- version --client`.
 ## Installation
 
 ```python
-bazel_dep(name = "rules_argocd", version = "0.2.0")
+bazel_dep(name = "rules_argocd", version = "0.3.0")
 ```
 
 That's all: rules_argocd's own `MODULE.bazel` fetches its pinned Argo CD
-manifest (3.3.8) as `@argocd` and registers the toolchain.
+manifest (3.3.19) as `@argocd` and registers the toolchain.
 
 `rules_argocd` is **Bzlmod-only**. Until it lands in BCR, consume
 via `archive_override` or a git pin pointing at a tag.
@@ -52,16 +54,51 @@ To choose the Argo CD version, set it in your root module:
 
 ```python
 argocd = use_extension("@rules_argocd//:extensions.bzl", "argocd")
-argocd.version(version = "3.3.8")
+argocd.version(version = "3.3.19")
 ```
 
 The root module's `argocd.version()` tags override rules_argocd's own by
 `name` (default `"argocd"`); other modules' tags are ignored. Giving one name
-two versions, or a version not in `private/versions.bzl`, fails with a message
-naming `argocd.version`. Through v0.1.0 the root had to set `argocd.version()`,
+two different tags, or a version not in `private/versions.bzl` without its
+own `sha256`, fails with a message naming `argocd.version`. Through v0.1.0 the root had to set `argocd.version()`,
 or resolution failed with `does not generate repository "argocd"`; the
 `use_repo(argocd, "argocd")` / `register_toolchains("@argocd//:all")` lines
 earlier READMEs asked for are harmless but no longer needed.
+
+Through v0.2.0 the default was 3.3.8, whose application controller panics on
+a sync when a resource's API type can't be discovered yet (for example while
+CRDs install), leaving the operation in `Error` without running
+`syncPolicy.retry` (argoproj/argo-cd#26608, fixed in 3.3.10). v0.3.0
+defaults to 3.3.19; 3.3.8 stays available.
+
+### Versions not in the list
+
+To use an Argo CD release that `private/versions.bzl` doesn't list, give its
+pins in the tag (since v0.3.0):
+
+```python
+argocd.version(
+    version = "3.3.20",
+    # sha256 of manifests/install.yaml at the v3.3.20 tag
+    sha256 = "...",
+    # from the release's cli_checksums.txt; only the platforms you build for
+    cli_sha256 = {
+        "linux_amd64": "...",
+        "darwin_arm64": "...",
+    },
+)
+```
+
+- `url` (optional) replaces the manifest URL, which defaults to
+  `https://raw.githubusercontent.com/argoproj/argo-cd/v<version>/manifests/install.yaml`.
+- `cli_sha256` keys are `linux_amd64`, `linux_arm64`, `darwin_amd64` and
+  `darwin_arm64`. A platform you leave out fails only when its CLI is built,
+  with a message naming `cli_sha256`; installs never need the CLI.
+- For a listed version these attrs replace its pins (for example a mirror
+  `url`).
+- `bash tools/update_versions.sh <version>` (from a clone of this repo)
+  prints all of them, checking each CLI download against
+  `cli_checksums.txt`.
 
 The release archive (the tag tarball) leaves out `tests/` and `tools/`, so
 `bazel query @rules_argocd//...` works for consumers. A `git_override` clone
@@ -250,7 +287,7 @@ chain actually reconciles.
 
 | Field | Type | Description |
 |---|---|---|
-| `version` | `string` | Argo CD version, e.g. `"3.3.8"` |
+| `version` | `string` | Argo CD version, e.g. `"3.3.19"` |
 | `manifest` | `File` | The downloaded, sha256-verified `install.yaml` |
 | `namespace` | `string` | Defaults to `"argocd"` (matches the manifest's hard-coded references) |
 
@@ -260,7 +297,7 @@ chain actually reconciles.
 
 | Component | Status | Notes |
 |---|---|---|
-| `install.yaml` | Fully hermetic. URL + sha256 pinned in `private/versions.bzl`; downloaded by the bzlmod extension. | Update via `bash tools/update_versions.sh <version>` when bumping. |
+| `install.yaml` | Fully hermetic. URL + sha256 pinned in `private/versions.bzl`, or in the root's `argocd.version()` for other versions; downloaded by the bzlmod extension. | Update via `bash tools/update_versions.sh <version>` when bumping. |
 | `argocd` CLI | Fully hermetic (v0.2.0). Per-platform release binaries, sha256-pinned in `private/versions.bzl` next to the manifest. | `tools/update_versions.sh` pins them from `cli_checksums.txt` and checks each download. |
 | `kubectl` | **Not vendored.** v0.1 honors `$KUBECTL` env (set by `rules_kind`'s per-cluster env file) and falls back to `$PATH`. | Future: bundle a hermetic kubectl via toolchain. |
 | Target cluster | Out of scope — bring your own (`rules_kind`, real cluster, etc.). | The rule reads `KUBECONFIG` from env. |

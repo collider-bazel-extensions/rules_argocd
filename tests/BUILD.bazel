@@ -40,7 +40,7 @@ sh_test(
     srcs = ["argocd_cli_test.sh"],
     args = [
         "$(rlocationpath //:argocd)",
-        "3.3.8",
+        "3.3.19",
     ],
     data = ["//:argocd"],
 )
@@ -104,7 +104,7 @@ genrule(
 argocd_toolchain(
     name = "smoke_toolchain_impl",
     manifest = ":smoke_install_yaml",
-    version = "3.3.8",
+    version = "3.3.19",
 )
 
 # Registered ahead of @argocd//:all, as a dev dependency (MODULE.bazel), so

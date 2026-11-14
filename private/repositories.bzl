@@ -4,7 +4,7 @@ declares the runnable CLI `:argocd`, which selects one of the per-platform
 CLI repos (`<hub>_cli_<platform>`). Those download only when built.
 """
 
-load(":versions.bzl", "ARGOCD_CLI_URL", "ARGOCD_VERSIONS", "PLATFORMS")
+load(":versions.bzl", "ARGOCD_CLI_URL", "ARGOCD_MANIFEST_URL", "ARGOCD_VERSIONS", "PLATFORMS")
 
 _HUB_BUILD_TMPL = """\
 load("@rules_argocd//private:cli.bzl", "argocd_cli")
@@ -53,16 +53,10 @@ toolchain(
 
 def _hub_repo_impl(rctx):
     version = rctx.attr.version
-    if version not in ARGOCD_VERSIONS:
-        fail("rules_argocd: unknown version '{}'. Known: {}".format(
-            version,
-            sorted(ARGOCD_VERSIONS.keys()),
-        ))
-    pinned = ARGOCD_VERSIONS[version]
     rctx.download(
-        url = pinned["url"],
+        url = rctx.attr.url,
         output = "install.yaml",
-        sha256 = pinned["sha256"],
+        sha256 = rctx.attr.sha256,
     )
     rctx.file("WORKSPACE", "workspace(name = \"{}\")\n".format(rctx.name))
 
@@ -93,6 +87,8 @@ _argocd_hub_repository = repository_rule(
     implementation = _hub_repo_impl,
     attrs = {
         "version": attr.string(mandatory = True),
+        "url": attr.string(mandatory = True),
+        "sha256": attr.string(mandatory = True),
         # The hub's apparent name, which prefixes its CLI repos' names.
         "hub": attr.string(mandatory = True),
     },
@@ -101,10 +97,16 @@ _argocd_hub_repository = repository_rule(
 def _cli_repo_impl(rctx):
     os, arch = rctx.attr.platform.split("_")
     version = rctx.attr.version
+    if not rctx.attr.sha256:
+        fail("rules_argocd: no sha256 for the Argo CD {} CLI on {}; add it to argocd.version(cli_sha256 = {{\"{}\": ...}}) (from the release's cli_checksums.txt).".format(
+            version,
+            rctx.attr.platform,
+            rctx.attr.platform,
+        ))
     rctx.download(
         url = ARGOCD_CLI_URL.format(version = version, os = os, arch = arch),
         output = "argocd",
-        sha256 = ARGOCD_VERSIONS[version]["cli"][rctx.attr.platform],
+        sha256 = rctx.attr.sha256,
         executable = True,
     )
     rctx.file("WORKSPACE", "workspace(name = \"{}\")\n".format(rctx.name))
@@ -115,20 +117,44 @@ _argocd_cli_repository = repository_rule(
     attrs = {
         "version": attr.string(mandatory = True),
         "platform": attr.string(mandatory = True),
+        # Empty: no pin for this platform, so fetching fails (only when a
+        # build needs this platform's CLI).
+        "sha256": attr.string(),
     },
 )
 
-def argocd_version_repository(name, version):
-    """Materialize the hub repo for one Argo CD version."""
-    if version not in ARGOCD_VERSIONS:
-        fail("rules_argocd: unknown version '{}'. Known: {}".format(
+def argocd_version_repository(name, version, url = "", sha256 = "", cli_sha256 = {}):
+    """Materialize the hub repo for one Argo CD version.
+
+    Pins default to ARGOCD_VERSIONS[version]; `url`, `sha256` and
+    `cli_sha256` (by platform) replace them, and a version not in
+    ARGOCD_VERSIONS needs at least `sha256`.
+    """
+    known = ARGOCD_VERSIONS.get(version, {})
+    if not sha256 and not known:
+        fail("rules_argocd: unknown version '{}' and no sha256. Known: {}".format(
             version,
             sorted(ARGOCD_VERSIONS.keys()),
         ))
-    _argocd_hub_repository(name = name, version = version, hub = name)
+    for plat in cli_sha256:
+        if plat not in PLATFORMS:
+            fail("rules_argocd: cli_sha256 has unknown platform '{}'. Platforms: {}".format(
+                plat,
+                sorted(PLATFORMS.keys()),
+            ))
+    _argocd_hub_repository(
+        name = name,
+        version = version,
+        url = url or known.get("url") or ARGOCD_MANIFEST_URL.format(version = version),
+        sha256 = sha256 or known["sha256"],
+        hub = name,
+    )
+    cli = dict(known.get("cli", {}))
+    cli.update(cli_sha256)
     for plat in PLATFORMS.keys():
         _argocd_cli_repository(
             name = "{}_cli_{}".format(name, plat),
             version = version,
             platform = plat,
+            sha256 = cli.get(plat, ""),
         )

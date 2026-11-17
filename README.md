@@ -41,7 +41,7 @@ target (since v0.2.0): `bazel run @rules_argocd//:argocd -- version --client`.
 ## Installation
 
 ```python
-bazel_dep(name = "rules_argocd", version = "0.3.0")
+bazel_dep(name = "rules_argocd", version = "0.3.1")
 ```
 
 That's all: rules_argocd's own `MODULE.bazel` fetches its pinned Argo CD
@@ -329,3 +329,7 @@ support claim. Filing an issue with the result is plenty.
 Want Bazel rules for another tool or service?
 [Request a rules package](https://github.com/collider-bazel-extensions/.github/issues/new?template=request-a-rules-package.yml).
 The [organization page](https://github.com/collider-bazel-extensions) lists every package.
+
+## License
+
+[Apache License 2.0](LICENSE) (SPDX: `Apache-2.0`).
